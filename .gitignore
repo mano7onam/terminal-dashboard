@@ -1,0 +1,92 @@
+# ── Python ──────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.venv/
+venv/
+env/
+*.egg-info/
+.eggs/
+*.egg
+pip-wheel-metadata/
+
+# ── Packaging / builds (do not commit binaries) ─────────
+# App + DMG output from scripts/build_dmg.sh
+dist/
+build/
+# Explicit patterns if someone builds next to the repo root
+*.dmg
+*.app/
+!assets/  # keep source assets
+# Intermediate icon / dmg tooling
+*.iconset/
+*.icns
+# Optional: allow publishing a release asset path via CI only
+# (never commit large DMGs to git history)
+dmg-stage/
+_rw.dmg
+*.sparseimage
+
+# Swift / Xcode leftovers
+.swiftpm/
+.build/
+DerivedData/
+*.xcodeproj/
+*.xcworkspace/
+xcuserdata/
+
+# ── macOS ───────────────────────────────────────────────
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+Icon?
+.fseventsd/
+
+# ── Editors / IDEs ──────────────────────────────────────
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+*.sublime-project
+*.sublime-workspace
+
+# ── Env / secrets ───────────────────────────────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.p12
+secrets/
+
+# ── Logs / temp ─────────────────────────────────────────
+*.log
+.cache/
+tmp/
+.temp/
+/tmp/
+*.tmp
+
+# ── Test / coverage ─────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.tox/
+nosetests.xml
+coverage.xml
+
+# ── Local user noise ────────────────────────────────────
+# Personal session dumps if someone exports into the repo by mistake
+exports/
+*.session.jsonl
+
+# ── Marketing drafts (local launch kit — not part of OSS tree)
+# Posts for Reddit/Habr/HN/PH, YouTube script, growth notes
+marketing/

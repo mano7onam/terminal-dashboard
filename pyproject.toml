@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "macos-terminal-dashboard"
+version = "1.4.0"
+description = "Live dashboard for every terminal on your Mac — group by project, focus Ghostty/iTerm/VS Code, export Claude Code & Codex chats to Markdown"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+authors = [
+  { name = "Terminal Dashboard contributors" }
+]
+keywords = [
+  "macos",
+  "terminal",
+  "dashboard",
+  "iterm2",
+  "ghostty",
+  "warp",
+  "wezterm",
+  "kitty",
+  "alacritty",
+  "tmux",
+  "developer-tools",
+  "productivity",
+]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: MacOS X",
+  "Intended Audience :: Developers",
+  "License :: OSI Approved :: MIT License",
+  "Operating System :: MacOS",
+  "Programming Language :: Python :: 3",
+  "Topic :: Terminals",
+  "Topic :: Utilities",
+]
+dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/mano7onam/terminal-dashboard"
+Repository = "https://github.com/mano7onam/terminal-dashboard"
+Issues = "https://github.com/mano7onam/terminal-dashboard/issues"
+
+[project.scripts]
+terminal-dashboard = "terminal_dashboard.__main__:main"
+
+[tool.setuptools.packages.find]
+include = ["terminal_dashboard*"]
