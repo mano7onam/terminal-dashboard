@@ -1,14 +1,15 @@
 """Agent session transcripts for export.
 
-Implementation lives in the shared library **agent_session_bridge**
-(`~/dev/agent-session-bridge`) so Terminal Dashboard and the `asb` CLI
-do not duplicate Claude/Codex/Grok parsers.
+Implementation lives in the shared library **puenteo**
+(``pip install puenteo`` / ``~/dev/puenteo``) so Terminal Dashboard and the
+``puenteo`` CLI do not duplicate Claude/Codex/Grok/Pi parsers.
 
-CLI for agents (search / smart pull across sessions)::
+CLI for agents::
 
-    asb list --json
-    asb search "topic" --json
-    asb pull <session_id> --query "topic" --mode query
+    puenteo list --json
+    puenteo search "topic" --json
+    puenteo pull <session_id> --query "topic" --mode query
+    puenteo export <session_id> -f md -o chat.md
 
 This module re-exports the rich export API used by ``export.service`` /
 ``export.formats``.
@@ -23,51 +24,56 @@ from typing import Any, Dict, List, Optional
 
 
 def _bootstrap_shared_lib() -> Path:
-    """Make ``agent_session_bridge`` importable (editable install or sibling repo)."""
+    """Make ``puenteo`` importable (pip install or sibling repo)."""
     try:
-        import agent_session_bridge  # noqa: F401
+        import puenteo  # noqa: F401
 
-        return Path(agent_session_bridge.__file__).resolve().parent.parent
+        return Path(puenteo.__file__).resolve().parent.parent
     except ImportError:
         pass
 
-    env = os.environ.get("AGENT_SESSION_BRIDGE_PATH") or os.environ.get("ASB_PATH")
+    env = (
+        os.environ.get("PUENTEO_PATH")
+        or os.environ.get("AGENT_SESSION_BRIDGE_PATH")
+        or os.environ.get("ASB_PATH")
+    )
     candidates = []
     if env:
         candidates.append(Path(os.path.expanduser(env)))
 
-    # …/claude-terminal-ui/terminal_dashboard/export/agents.py → sibling repo
+    # …/claude-terminal-ui/terminal_dashboard/export/agents.py → sibling repos
     here = Path(__file__).resolve()
-    repo_root = here.parents[2]  # claude-terminal-ui
-    candidates.append(repo_root.parent / "agent-session-bridge")
+    repo_root = here.parents[2]
+    candidates.append(repo_root.parent / "puenteo")
+    candidates.append(repo_root.parent / "agent-session-bridge")  # legacy folder
+    candidates.append(Path.home() / "dev" / "puenteo")
     candidates.append(Path.home() / "dev" / "agent-session-bridge")
 
     for root in candidates:
         if not root:
             continue
-        pkg = root / "agent_session_bridge"
+        pkg = root / "puenteo"
         if pkg.is_dir():
             root_s = str(root)
             if root_s not in sys.path:
                 sys.path.insert(0, root_s)
             try:
-                import agent_session_bridge  # noqa: F401
+                import puenteo  # noqa: F401
 
                 return root
             except ImportError:
                 continue
 
     raise ImportError(
-        "agent_session_bridge not found. Clone/install it next to this repo "
-        "(~/dev/agent-session-bridge) or set AGENT_SESSION_BRIDGE_PATH. "
-        "See https://github.com/mano7onam/agent-session-bridge"
+        "puenteo not found. Install with: pip install puenteo\n"
+        "Or clone next to this repo (~/dev/puenteo) / set PUENTEO_PATH.\n"
+        "See https://github.com/mano7onam/puenteo"
     )
 
 
-_ASB_ROOT = _bootstrap_shared_lib()
+_PUENTEO_ROOT = _bootstrap_shared_lib()
 
-# Shared rich export surface (attachments, tools, thinking)
-from agent_session_bridge.rich import (  # noqa: E402
+from puenteo.rich import (  # noqa: E402
     Attachment,
     Message,
     Transcript,
@@ -77,40 +83,46 @@ from agent_session_bridge.rich import (  # noqa: E402
     list_claude_sessions,
     list_codex_sessions,
     list_grok_sessions,
+    list_pi_sessions,
     list_sources_for_cwd,
     load_transcript,
     transcript_from_scrollback,
 )
 
 try:
-    from agent_session_bridge.bootstrap import asb_cli_hint, which_asb
+    from puenteo.bootstrap import puenteo_cli_hint, which_puenteo
 except Exception:  # pragma: no cover
-    def which_asb() -> Optional[str]:
+
+    def which_puenteo() -> Optional[str]:
         return None
 
-    def asb_cli_hint() -> Dict[str, Any]:
+    def puenteo_cli_hint() -> Dict[str, Any]:
         return {
-            "package": "agent-session-bridge",
-            "cli": "asb",
-            "path": str(_ASB_ROOT),
+            "package": "puenteo",
+            "cli": "puenteo",
+            "path": str(_PUENTEO_ROOT),
             "binary": None,
         }
 
 
 def shared_library_info() -> Dict[str, Any]:
     """For /api/health and UI — where export/search logic comes from."""
-    hint = asb_cli_hint()
+    hint = dict(puenteo_cli_hint())
     try:
-        import agent_session_bridge as asb
+        import puenteo as p
 
-        ver = getattr(asb, "__version__", "?")
+        ver = getattr(p, "__version__", "?")
     except Exception:
         ver = "?"
-    hint = dict(hint)
     hint["version"] = ver
-    hint["root"] = str(_ASB_ROOT)
-    hint["binary"] = which_asb()
+    hint["root"] = str(_PUENTEO_ROOT)
+    hint["binary"] = which_puenteo()
     return hint
+
+
+# Back-compat names used by older UI code
+which_asb = which_puenteo
+asb_cli_hint = puenteo_cli_hint
 
 
 __all__ = [
@@ -123,10 +135,13 @@ __all__ = [
     "list_claude_sessions",
     "list_codex_sessions",
     "list_grok_sessions",
+    "list_pi_sessions",
     "list_sources_for_cwd",
     "load_transcript",
     "transcript_from_scrollback",
     "shared_library_info",
+    "which_puenteo",
+    "puenteo_cli_hint",
     "which_asb",
     "asb_cli_hint",
 ]

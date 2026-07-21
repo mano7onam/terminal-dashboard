@@ -72,8 +72,11 @@ class DashboardHandler(SimpleHTTPRequestHandler):
             try:
                 from .export import agents as export_agents
 
-                payload["asb"] = export_agents.shared_library_info()
+                lib = export_agents.shared_library_info()
+                payload["puenteo"] = lib
+                payload["asb"] = lib  # back-compat
             except Exception as exc:
+                payload["puenteo"] = {"error": str(exc)}
                 payload["asb"] = {"error": str(exc)}
             self._json(payload)
             return

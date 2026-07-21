@@ -190,15 +190,17 @@ Paste a full Claude Code / Codex conversation into another agent:
 
 **Shared library + CLI**
 
-Export parsers live in sibling project **[agent-session-bridge](https://github.com/mano7onam/agent-session-bridge)** (`asb` CLI). Terminal Dashboard imports the same package so agents can:
+Export parsers live in **[puenteo](https://github.com/mano7onam/puenteo)** — the bridge between coding agents. Terminal Dashboard imports the same package so agents can:
 
 ```bash
-asb list --json
-asb search "topic" --json
-asb pull <session_id> --query "topic" --mode query
+pip install puenteo   # or: uv add puenteo
+puenteo list --json
+puenteo search "topic" --json
+puenteo pull <session_id> --query "topic" --mode query
+puenteo export <session_id> -f md -o chat.md
 ```
 
-Install next to this repo (`~/dev/agent-session-bridge`) or set `AGENT_SESSION_BRIDGE_PATH`. `/api/health` → `asb` reports the linked library path.
+Sibling clone (`~/dev/puenteo`) or `PUENTEO_PATH` also works. `/api/health` → `puenteo` reports the linked library.
 
 ---
 

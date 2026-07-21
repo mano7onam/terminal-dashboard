@@ -50,8 +50,9 @@ def list_export_sources(session: Dict[str, Any]) -> Dict[str, Any]:
         "formats": ["md", "txt", "html", "pdf", "json", "zip"],
         "destinations": ["clipboard", "download", "file"],
         "recommended": "agent" if agent_sources else "scrollback",
-        # Shared with Agent Session Bridge CLI (`asb`) — same library, no duplicated parsers
-        "asb": agents.shared_library_info(),
+        # Shared with puenteo library/CLI — same parsers, no duplication
+        "puenteo": agents.shared_library_info(),
+        "asb": agents.shared_library_info(),  # back-compat key
     }
 
 
