@@ -63,15 +63,16 @@ If you live in terminals (and coding agents), you eventually have:
 ```bash
 git clone https://github.com/mano7onam/terminal-dashboard.git
 cd terminal-dashboard
-python3 server.py
+python3 server.py                      # native app window (WKWebView)
 ```
 
-Open **http://localhost:8080**
-
 ```bash
-python3 server.py --port 9090          # custom port
+python3 server.py --browser            # browser tab instead
+python3 server.py --no-open            # server only
+python3 server.py --port 9090
 python3 -m terminal_dashboard          # same entry
-make run
+./run.sh                               # app window
+BROWSER=1 ./run.sh                     # browser tab
 ```
 
 ### Requirements
