@@ -194,13 +194,16 @@ Export parsers live in **[puenteo](https://github.com/mano7onam/puenteo)** — t
 
 ```bash
 pip install puenteo   # or: uv add puenteo
+# CLI (same binary):
 puenteo list --json
-puenteo search "topic" --json
-puenteo pull <session_id> --query "topic" --mode query
-puenteo export <session_id> -f md -o chat.md
+asb list --json
+asb search "topic" --json
+asb pull <session_id> --query "topic" --mode query
+asb export <session_id> -f md -o chat.md
 ```
 
-Sibling clone (`~/dev/puenteo`) or `PUENTEO_PATH` also works. `/api/health` → `puenteo` reports the linked library.
+Dashboard depends on the **puenteo** library for chat export (`import puenteo`).  
+Sibling clone (`~/dev/puenteo`) or `PUENTEO_PATH` is a fallback. `/api/health` → `puenteo`.
 
 ---
 

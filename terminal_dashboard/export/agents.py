@@ -1,18 +1,15 @@
-"""Agent session transcripts for export.
+"""Agent session transcripts for export — powered by **puenteo**.
 
-Implementation lives in the shared library **puenteo**
-(``pip install puenteo`` / ``~/dev/puenteo``) so Terminal Dashboard and the
-``puenteo`` CLI do not duplicate Claude/Codex/Grok/Pi parsers.
+Install once::
 
-CLI for agents::
-
-    puenteo list --json
-    puenteo search "topic" --json
-    puenteo pull <session_id> --query "topic" --mode query
-    puenteo export <session_id> -f md -o chat.md
+    pip install puenteo
+    # CLI (same tool):
+    puenteo list
+    asb list
 
 This module re-exports the rich export API used by ``export.service`` /
-``export.formats``.
+``export.formats``. Prefer the installed package; fall back to a sibling
+checkout under ``~/dev/puenteo`` if needed.
 """
 
 from __future__ import annotations
@@ -20,11 +17,11 @@ from __future__ import annotations
 import os
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Optional
 
 
-def _bootstrap_shared_lib() -> Path:
-    """Make ``puenteo`` importable (pip install or sibling repo)."""
+def _bootstrap_puenteo() -> Path:
+    """Ensure ``puenteo`` is importable; return package root path."""
     try:
         import puenteo  # noqa: F401
 
@@ -41,38 +38,45 @@ def _bootstrap_shared_lib() -> Path:
     if env:
         candidates.append(Path(os.path.expanduser(env)))
 
-    # …/claude-terminal-ui/terminal_dashboard/export/agents.py → sibling repos
     here = Path(__file__).resolve()
-    repo_root = here.parents[2]
-    candidates.append(repo_root.parent / "puenteo")
-    candidates.append(repo_root.parent / "agent-session-bridge")  # legacy folder
-    candidates.append(Path.home() / "dev" / "puenteo")
-    candidates.append(Path.home() / "dev" / "agent-session-bridge")
+    repo_root = here.parents[2]  # claude-terminal-ui / terminal-dashboard repo
+    candidates.extend(
+        [
+            repo_root.parent / "puenteo",
+            repo_root.parent / "agent-session-bridge",  # legacy local folder name
+            Path.home() / "dev" / "puenteo",
+            Path.home() / "dev" / "agent-session-bridge",
+        ]
+    )
 
     for root in candidates:
         if not root:
             continue
         pkg = root / "puenteo"
-        if pkg.is_dir():
-            root_s = str(root)
-            if root_s not in sys.path:
-                sys.path.insert(0, root_s)
-            try:
-                import puenteo  # noqa: F401
+        if not pkg.is_dir():
+            continue
+        root_s = str(root)
+        if root_s not in sys.path:
+            sys.path.insert(0, root_s)
+        try:
+            import puenteo  # noqa: F401
 
-                return root
-            except ImportError:
-                continue
+            return root
+        except ImportError:
+            continue
 
     raise ImportError(
-        "puenteo not found. Install with: pip install puenteo\n"
-        "Or clone next to this repo (~/dev/puenteo) / set PUENTEO_PATH.\n"
-        "See https://github.com/mano7onam/puenteo"
+        "puenteo is required for agent chat export.\n"
+        "  pip install puenteo\n"
+        "  # or: uv add puenteo\n"
+        "  # or clone https://github.com/mano7onam/puenteo and set PUENTEO_PATH\n"
+        "Docs: https://pypi.org/project/puenteo/"
     )
 
 
-_PUENTEO_ROOT = _bootstrap_shared_lib()
+_PUENTEO_ROOT = _bootstrap_puenteo()
 
+# Rich export surface (attachments, tools, thinking) — from puenteo
 from puenteo.rich import (  # noqa: E402
     Attachment,
     Message,
@@ -100,13 +104,17 @@ except Exception:  # pragma: no cover
         return {
             "package": "puenteo",
             "cli": "puenteo",
+            "cli_aliases": ["puenteo", "asb", "pto"],
             "path": str(_PUENTEO_ROOT),
             "binary": None,
+            "install": "pip install puenteo",
+            "github": "https://github.com/mano7onam/puenteo",
+            "pypi": "https://pypi.org/project/puenteo/",
         }
 
 
 def shared_library_info() -> Dict[str, Any]:
-    """For /api/health and UI — where export/search logic comes from."""
+    """For /api/health and UI — linked puenteo library + CLI."""
     hint = dict(puenteo_cli_hint())
     try:
         import puenteo as p
@@ -117,10 +125,11 @@ def shared_library_info() -> Dict[str, Any]:
     hint["version"] = ver
     hint["root"] = str(_PUENTEO_ROOT)
     hint["binary"] = which_puenteo()
+    hint["import"] = "puenteo"
     return hint
 
 
-# Back-compat names used by older UI code
+# Back-compat names
 which_asb = which_puenteo
 asb_cli_hint = puenteo_cli_hint
 
