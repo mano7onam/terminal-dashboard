@@ -74,17 +74,42 @@ def main() -> None:
         except Exception:
             time.sleep(0.08)
 
-    # Open dashboard once — reuse existing tab when possible
-    try:
-        from terminal_dashboard.browser import open_dashboard
-        open_dashboard(url, mode="reuse")
-    except Exception:
+    # Default: native app window (WKWebView). Browser is optional.
+    prefer_browser = os.environ.get("TERMINAL_DASHBOARD_BROWSER", "").strip() in (
+        "1",
+        "true",
+        "yes",
+        "browser",
+    )
+    if prefer_browser:
         try:
-            webbrowser.open(url)
-        except Exception:
-            pass
+            from terminal_dashboard.browser import open_dashboard
 
-    # Status UI (tkinter ships with macOS python)
+            open_dashboard(url, mode="reuse")
+        except Exception:
+            try:
+                webbrowser.open(url)
+            except Exception:
+                pass
+    else:
+        try:
+            from terminal_dashboard.app_window import open_app_window
+
+            res = open_app_window(url)
+            if res.get("status") != "success":
+                raise RuntimeError(res.get("message") or "webview failed")
+        except Exception:
+            try:
+                from terminal_dashboard.browser import open_dashboard
+
+                open_dashboard(url, mode="reuse")
+            except Exception:
+                try:
+                    webbrowser.open(url)
+                except Exception:
+                    pass
+
+    # Compact status tray (server host) — optional tk window
     try:
         import tkinter as tk
         from tkinter import font as tkfont
@@ -100,7 +125,7 @@ def main() -> None:
 
     root = tk.Tk()
     root.title(APP_NAME)
-    root.geometry("380x220")
+    root.geometry("400x240")
     root.resizable(False, False)
     root.configure(bg="#0f172a")
 
@@ -143,6 +168,14 @@ def main() -> None:
     btn_row = tk.Frame(root, bg="#0f172a")
     btn_row.pack(pady=12)
 
+    def open_app() -> None:
+        try:
+            from terminal_dashboard.app_window import open_app_window
+
+            open_app_window(url)
+        except Exception:
+            open_dash()
+
     def open_dash() -> None:
         try:
             from terminal_dashboard.browser import open_dashboard
@@ -166,12 +199,20 @@ def main() -> None:
         os._exit(0)
 
     open_btn = tk.Button(
-        btn_row, text="Open (reuse tab)", command=open_dash,
+        btn_row, text="App window", command=open_app,
         font=body_font, fg="#0f172a", bg="#818cf8",
         activebackground="#a5b4fc", relief="flat",
         padx=10, pady=8, cursor="hand2",
     )
     open_btn.pack(side="left", padx=4)
+
+    open_browser_btn = tk.Button(
+        btn_row, text="Browser tab", command=open_dash,
+        font=body_font, fg="#e2e8f0", bg="#334155",
+        activebackground="#475569", relief="flat",
+        padx=10, pady=8, cursor="hand2",
+    )
+    open_browser_btn.pack(side="left", padx=4)
 
     open_new_btn = tk.Button(
         btn_row, text="New tab", command=open_dash_new,
@@ -189,11 +230,12 @@ def main() -> None:
     )
     quit_btn.pack(side="left", padx=4)
 
-    status.bind("<Button-1>", lambda _e: open_dash())
+    status.bind("<Button-1>", lambda _e: open_app())
 
     tk.Label(
         root,
-        text="Keep this window open while you use the dashboard.\nQuit here to stop the server.",
+        text="Default UI: native app window (WebView).\n"
+        "Optional: open in a browser tab. Quit here to stop the server.",
         font=tkfont.Font(family="Helvetica", size=9),
         fg="#64748b", bg="#0f172a", justify="center",
     ).pack(pady=(4, 10))

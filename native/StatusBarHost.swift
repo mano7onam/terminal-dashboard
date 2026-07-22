@@ -1,8 +1,10 @@
 import Cocoa
 import Foundation
+import WebKit
 
-/// Menu-bar + Dock host for Terminal Dashboard.
-/// Keeps a persistent presence while the Python HTTP server runs as a child process.
+/// Menu-bar + Dock + **WKWebView app window** host for Terminal Dashboard.
+/// Default UX: native window with embedded web UI (no browser tab).
+/// Optional: open the same URL in a browser tab.
 
 let app = NSApplication.shared
 let delegate = AppDelegate()
@@ -10,11 +12,11 @@ app.delegate = delegate
 app.setActivationPolicy(.regular) // Dock icon stays visible
 app.run()
 
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem!
     private var serverProcess: Process?
     private var port: Int = 8080
-    private var healthTimer: Timer?
+    private var windowController: DashboardWindowController?
 
     private var dashboardURL: URL {
         URL(string: "http://127.0.0.1:\(port)/")!
@@ -23,18 +25,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         setupStatusItem()
         startServer()
-        // Open browser once after server is up — reuse existing tab if any
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.8) { [weak self] in
-            self?.openDashboardReuse()
+        // Default: native WebView window (not browser)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            self?.showAppWindow()
         }
-        // Keep Dock tile visible / bounce once so user notices the app
         NSApp.dockTile.badgeLabel = nil
-        NSApp.activate(ignoringOtherApps: false)
     }
 
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        // Clicking Dock icon → reuse existing tab when possible
-        openDashboardReuse()
+        // Dock click → focus / reopen app window
+        showAppWindow()
         return true
     }
 
@@ -47,11 +47,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func setupStatusItem() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         if let button = statusItem.button {
-            // Prefer custom icon; fallback to SF Symbol / text
             if let img = loadMenuBarImage() {
                 button.image = img
                 button.imagePosition = .imageOnly
-            } else if let symbol = NSImage(systemSymbolName: "terminal.fill", accessibilityDescription: "Terminal Dashboard") {
+            } else if let symbol = NSImage(
+                systemSymbolName: "terminal.fill",
+                accessibilityDescription: "Terminal Dashboard"
+            ) {
                 button.image = symbol
             } else {
                 button.title = ">_"
@@ -60,26 +62,41 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
 
         let menu = NSMenu()
-        menu.addItem(NSMenuItem(title: "Terminal Dashboard", action: nil, keyEquivalent: ""))
-        menu.items.first?.isEnabled = false
+        let titleItem = NSMenuItem(title: "Terminal Dashboard", action: nil, keyEquivalent: "")
+        titleItem.isEnabled = false
+        menu.addItem(titleItem)
 
-        let openReuse = NSMenuItem(
-            title: "Open Dashboard (reuse tab)",
-            action: #selector(openDashboardReuse),
+        let showWin = NSMenuItem(
+            title: "Show App Window",
+            action: #selector(showAppWindow),
             keyEquivalent: "o"
         )
-        openReuse.target = self
-        menu.addItem(openReuse)
+        showWin.target = self
+        menu.addItem(showWin)
+
+        menu.addItem(NSMenuItem.separator())
+
+        let openBrowser = NSMenuItem(
+            title: "Open in Browser (reuse tab)",
+            action: #selector(openDashboardReuse),
+            keyEquivalent: "b"
+        )
+        openBrowser.target = self
+        menu.addItem(openBrowser)
 
         let openNew = NSMenuItem(
-            title: "Open Dashboard in New Tab",
+            title: "Open in Browser (new tab)",
             action: #selector(openDashboardNew),
             keyEquivalent: "n"
         )
         openNew.target = self
         menu.addItem(openNew)
 
-        let copyItem = NSMenuItem(title: "Copy Dashboard URL", action: #selector(copyURL), keyEquivalent: "c")
+        let copyItem = NSMenuItem(
+            title: "Copy Dashboard URL",
+            action: #selector(copyURL),
+            keyEquivalent: "c"
+        )
         copyItem.target = self
         menu.addItem(copyItem)
 
@@ -92,7 +109,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
-        let quitItem = NSMenuItem(title: "Quit Terminal Dashboard", action: #selector(quitApp), keyEquivalent: "q")
+        let quitItem = NSMenuItem(
+            title: "Quit Terminal Dashboard",
+            action: #selector(quitApp),
+            keyEquivalent: "q"
+        )
         quitItem.target = self
         menu.addItem(quitItem)
 
@@ -107,7 +128,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func loadMenuBarImage() -> NSImage? {
-        // Template 18pt icon for menu bar
         guard let res = Bundle.main.resourcePath else { return nil }
         let candidates = [
             res + "/MenuBarIcon.png",
@@ -119,16 +139,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 let size = NSSize(width: 18, height: 18)
                 let resized = NSImage(size: size)
                 resized.lockFocus()
-                img.draw(in: NSRect(origin: .zero, size: size),
-                         from: NSRect(origin: .zero, size: img.size),
-                         operation: .copy,
-                         fraction: 1.0)
+                img.draw(
+                    in: NSRect(origin: .zero, size: size),
+                    from: NSRect(origin: .zero, size: img.size),
+                    operation: .copy,
+                    fraction: 1.0
+                )
                 resized.unlockFocus()
                 resized.isTemplate = true
                 return resized
             }
         }
         return nil
+    }
+
+    // MARK: - App window (WKWebView)
+
+    @objc func showAppWindow() {
+        updateURLMenuTitle()
+        if windowController == nil {
+            windowController = DashboardWindowController(url: dashboardURL)
+            windowController?.window?.delegate = self
+        } else {
+            windowController?.load(url: dashboardURL)
+        }
+        windowController?.showWindow(nil)
+        windowController?.window?.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        // Keep app running in menu bar / Dock; window can be reopened
+        // Don't nil controller if we want to reuse — actually recreate is fine
+        windowController = nil
     }
 
     // MARK: - Server
@@ -151,7 +194,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         let proc = Process()
         proc.executableURL = URL(fileURLWithPath: python)
-        proc.arguments = ["-m", "terminal_dashboard", "--port", "\(port)"]
+        // --no-open: host owns the UI (WebView); don't spawn a browser tab
+        proc.arguments = ["-m", "terminal_dashboard", "--port", "\(port)", "--no-open"]
         proc.currentDirectoryURL = URL(fileURLWithPath: appDir)
 
         var env = ProcessInfo.processInfo.environment
@@ -160,7 +204,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         env["TERMINAL_DASHBOARD_PORT"] = "\(port)"
         proc.environment = env
 
-        // Log to file for debugging
         let logPath = NSTemporaryDirectory() + "terminal-dashboard-server.log"
         FileManager.default.createFile(atPath: logPath, contents: nil)
         if let fh = FileHandle(forWritingAtPath: logPath) {
@@ -170,11 +213,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
         proc.terminationHandler = { [weak self] process in
             DispatchQueue.main.async {
-                guard let self = self else { return }
-                if process.terminationStatus != 0 && process.terminationReason != .exit {
-                    // unexpected crash — leave status item so user can Quit / Open
-                }
-                self.serverProcess = nil
+                self?.serverProcess = nil
             }
         }
 
@@ -188,12 +227,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func stopServer() {
-        healthTimer?.invalidate()
-        healthTimer = nil
         guard let proc = serverProcess else { return }
         if proc.isRunning {
             proc.terminate()
-            // give it a moment, then force
             DispatchQueue.global().async {
                 Thread.sleep(forTimeInterval: 0.8)
                 if proc.isRunning {
@@ -227,7 +263,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         for c in candidates where FileManager.default.isExecutableFile(atPath: c) {
             return c
         }
-        // PATH lookup
         let task = Process()
         task.executableURL = URL(fileURLWithPath: "/usr/bin/which")
         task.arguments = ["python3"]
@@ -263,7 +298,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             return bindResult == 0
         }
         if canBind(preferred) { return preferred }
-        // ephemeral
         let sock = socket(AF_INET, SOCK_STREAM, 0)
         guard sock >= 0 else { return preferred }
         defer { close(sock) }
@@ -286,7 +320,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return Int(UInt16(bigEndian: addr.sin_port))
     }
 
-    // MARK: - Actions
+    // MARK: - Browser (optional)
 
     @objc private func openDashboardReuse() {
         openBrowser(mode: "reuse")
@@ -296,7 +330,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openBrowser(mode: "new")
     }
 
-    /// mode: "reuse" finds an existing localhost:port tab; "new" always opens another tab
     private func openBrowser(mode: String) {
         updateURLMenuTitle()
         let api = URL(string: "http://127.0.0.1:\(port)/api/open_browser")!
@@ -320,14 +353,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 ok = true
             }
             if !ok {
-                // Fallback if API not ready yet
                 DispatchQueue.main.async {
-                    if mode == "new" {
-                        NSWorkspace.shared.open(self?.dashboardURL ?? api)
-                    } else {
-                        // Still try open — may create a tab; better than nothing
-                        NSWorkspace.shared.open(self?.dashboardURL ?? api)
-                    }
+                    NSWorkspace.shared.open(self?.dashboardURL ?? api)
                 }
             }
         }.resume()
@@ -351,5 +378,80 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         alert.alertStyle = .warning
         alert.addButton(withTitle: "OK")
         alert.runModal()
+    }
+}
+
+// MARK: - WKWebView window
+
+final class DashboardWindowController: NSWindowController {
+    private var webView: WKWebView!
+    private var currentURL: URL
+
+    init(url: URL) {
+        currentURL = url
+        let style: NSWindow.StyleMask = [.titled, .closable, .miniaturizable, .resizable]
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 1180, height: 780),
+            styleMask: style,
+            backing: .buffered,
+            defer: false
+        )
+        window.title = "Terminal Dashboard"
+        window.minSize = NSSize(width: 720, height: 480)
+        window.center()
+        window.isReleasedWhenClosed = false
+        window.titlebarAppearsTransparent = false
+        window.backgroundColor = NSColor(calibratedRed: 0.06, green: 0.09, blue: 0.16, alpha: 1)
+
+        super.init(window: window)
+        setupWebView(in: window)
+        load(url: url)
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) has not been implemented")
+    }
+
+    private func setupWebView(in window: NSWindow) {
+        let config = WKWebViewConfiguration()
+        config.preferences.setValue(true, forKey: "developerExtrasEnabled")
+
+        webView = WKWebView(frame: window.contentView?.bounds ?? .zero, configuration: config)
+        webView.autoresizingMask = [.width, .height]
+        webView.allowsBackForwardNavigationGestures = true
+        if #available(macOS 13.3, *) {
+            webView.isInspectable = true
+        }
+        // Dark-ish underpage while loading
+        webView.setValue(false, forKey: "drawsBackground")
+        window.contentView = webView
+    }
+
+    func load(url: URL) {
+        currentURL = url
+        // Retry a few times until the Python server answers
+        attemptLoad(url: url, triesLeft: 40)
+    }
+
+    private func attemptLoad(url: URL, triesLeft: Int) {
+        let task = URLSession.shared.dataTask(with: url.appendingPathComponent("api/health")) { [weak self] _, response, _ in
+            let http = response as? HTTPURLResponse
+            let ok = http != nil && (200...299).contains(http!.statusCode)
+            DispatchQueue.main.async {
+                guard let self = self else { return }
+                if ok {
+                    self.webView.load(URLRequest(url: url))
+                } else if triesLeft > 0 {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.12) {
+                        self.attemptLoad(url: url, triesLeft: triesLeft - 1)
+                    }
+                } else {
+                    // Load anyway — page may still work / show connection error
+                    self.webView.load(URLRequest(url: url))
+                }
+            }
+        }
+        task.resume()
     }
 }

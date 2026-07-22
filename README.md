@@ -39,7 +39,7 @@ If you live in terminals (and coding agents), you eventually have:
 | **New terminal** | Ghostty or Terminal.app in any folder (Browse… dialog) |
 | **Open in IDE** | Only IDEs you have installed (VS Code, Cursor, PyCharm, IDEA, Zed, …) |
 | **Export** | Markdown (primary), text, HTML, PDF, JSON, ZIP — Claude Code & Codex aware |
-| **Desktop app** | Optional `.app` + DMG: Dock + menu bar, reuse browser tab |
+| **Desktop app** | Native window with WebView (default) + Dock/menu bar; optional browser tab |
 
 ---
 

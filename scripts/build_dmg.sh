@@ -54,19 +54,29 @@ if [[ -f "$ROOT/assets/AppIcon-1024.png" ]]; then
 fi
 
 # ── Native host (Swift): menu bar + Dock, spawns Python server ───────────
-echo "==> Compiling menu-bar host (Swift)"
+echo "==> Compiling native host (Swift: menu bar + WKWebView app window)"
 python3 "$ROOT/scripts/make_menubar_icon.py"
 swiftc -O \
   -target "arm64-apple-macosx11.0" \
+  -framework WebKit -framework Cocoa \
   "$ROOT/native/StatusBarHost.swift" \
   -o "$APP/Contents/MacOS/Terminal Dashboard" \
   2>"$DIST/swiftc.log" || {
     # Fallback: also try universal / default target
     echo "warn: arm64 build failed, trying default target (see dist/swiftc.log)"
-    swiftc -O "$ROOT/native/StatusBarHost.swift" \
+    swiftc -O -framework WebKit -framework Cocoa \
+      "$ROOT/native/StatusBarHost.swift" \
       -o "$APP/Contents/MacOS/Terminal Dashboard"
   }
 chmod +x "$APP/Contents/MacOS/Terminal Dashboard"
+
+# Standalone WebView helper for python -m / run.sh (optional, cached under Resources)
+swiftc -O -framework WebKit -framework Cocoa \
+  "$ROOT/native/StandaloneWebView.swift" \
+  -o "$APP/Contents/Resources/TerminalDashboardWebView" 2>/dev/null || true
+if [[ -x "$APP/Contents/Resources/TerminalDashboardWebView" ]]; then
+  chmod +x "$APP/Contents/Resources/TerminalDashboardWebView"
+fi
 
 # Menu bar template icon
 if [[ -f "$ROOT/assets/MenuBarIcon.png" ]]; then
