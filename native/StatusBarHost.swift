@@ -158,20 +158,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc func showAppWindow() {
         updateURLMenuTitle()
         if windowController == nil {
+            // First open only — load the page once. Later reopens reuse the same WebView
+            // (no full reload → no 2s "Loading… Scanning terminals" flash).
             windowController = DashboardWindowController(url: dashboardURL)
             windowController?.window?.delegate = self
-        } else {
-            windowController?.load(url: dashboardURL)
         }
+        // Just reveal the existing window; do NOT call load() again
         windowController?.showWindow(nil)
         windowController?.window?.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
-    func windowWillClose(_ notification: Notification) {
-        // Keep app running in menu bar / Dock; window can be reopened
-        // Don't nil controller if we want to reuse — actually recreate is fine
-        windowController = nil
+    func windowShouldClose(_ sender: NSWindow) -> Bool {
+        // Hide instead of destroy — keeps WebView state + last data
+        sender.orderOut(nil)
+        return false
     }
 
     // MARK: - Server

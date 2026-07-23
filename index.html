@@ -197,6 +197,8 @@
         let exportSource = localStorage.getItem('exportSource') || 'auto'; // auto | agent | scrollback
         let lastRenderFingerprint = '';
         let refreshInFlight = false;
+        let hasHydratedFromCache = false;
+        const CACHE_KEY = 'td.terminals.v1';
         let focusInFlight = false;
         let pointerDown = false;
         let pendingRender = false;
@@ -296,13 +298,73 @@
             return folderName;
         }
 
+        // ---- Cache (instant open) ----
+        function loadCache() {
+            try {
+                const raw = localStorage.getItem(CACHE_KEY);
+                if (!raw) return null;
+                const parsed = JSON.parse(raw);
+                if (!parsed || !Array.isArray(parsed.terminals)) return null;
+                // Stale cache older than 24h — still usable for layout, but ok either way
+                return parsed;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        function saveCache(terminals) {
+            try {
+                localStorage.setItem(CACHE_KEY, JSON.stringify({
+                    ts: Date.now(),
+                    terminals,
+                    selectedProjectPath,
+                    selectedSessionUid,
+                }));
+            } catch (_) { /* quota / private mode */ }
+        }
+
+        function hydrateFromCache() {
+            const cached = loadCache();
+            if (!cached || !cached.terminals.length) return false;
+            allTerminals = cached.terminals;
+            rebuildUidIndex(allTerminals);
+            if (cached.selectedSessionUid && terminalsByUid.has(cached.selectedSessionUid)) {
+                selectedSessionUid = cached.selectedSessionUid;
+            }
+            if (cached.selectedProjectPath) {
+                selectedProjectPath = cached.selectedProjectPath;
+            }
+            hasHydratedFromCache = true;
+            renderData(true);
+            return true;
+        }
+
+        function setRefreshingUi(on) {
+            const refreshIcon = document.getElementById('refresh-icon');
+            const live = document.getElementById('live-badge');
+            if (on) {
+                refreshIcon.classList.add('animate-spin');
+                if (live) {
+                    live.dataset.prevText = live.textContent || 'Live';
+                    live.textContent = 'Sync';
+                    live.classList.add('opacity-70');
+                }
+            } else {
+                setTimeout(() => refreshIcon.classList.remove('animate-spin'), 280);
+                if (live) {
+                    live.textContent = live.dataset.prevText || 'Live';
+                    live.classList.remove('opacity-70');
+                }
+            }
+        }
+
         // ---- API ----
         async function refreshData(force = false) {
             if (refreshInFlight) return;
             if (pointerDown && !force) { pendingRender = true; return; }
             refreshInFlight = true;
-            const refreshIcon = document.getElementById('refresh-icon');
-            refreshIcon.classList.add('animate-spin');
+            // Soft indicator only — never wipe the UI with full-screen Loading
+            setRefreshingUi(true);
             try {
                 const response = await fetch('/api/terminals', { cache: 'no-store' });
                 if (!response.ok) throw new Error('API error');
@@ -314,13 +376,20 @@
                 if (selectedSessionUid && !terminalsByUid.has(selectedSessionUid)) {
                     selectedSessionUid = null;
                 }
+                saveCache(allTerminals);
                 renderData(force);
             } catch (err) {
                 console.error(err);
-                showToast('Failed to connect to backend');
+                // Keep cached UI; only toast if we have nothing to show
+                if (!allTerminals.length) {
+                    showToast('Failed to connect to backend');
+                    renderEmptyDetail('Waiting for backend…', 'Server is starting or unreachable. Retrying…');
+                } else {
+                    showToast('Refresh failed — showing last known sessions');
+                }
             } finally {
                 refreshInFlight = false;
-                setTimeout(() => refreshIcon.classList.remove('animate-spin'), 400);
+                setRefreshingUi(false);
             }
         }
 
@@ -1391,16 +1460,33 @@
                 }
             });
 
-            renderEmptyDetail('Loading…', 'Scanning terminals');
+            // Instant paint from last scan (localStorage), then soft refresh in background.
+            // Avoids full-screen "Loading… Scanning" every time the WebView opens.
+            const hadCache = hydrateFromCache();
+            if (!hadCache) {
+                renderEmptyDetail('Loading…', 'First scan — this only takes a moment');
+            }
+            // Background refresh immediately (does not blank the UI if cache exists)
             refreshData(true);
+            // Quiet poll — updates list without full-page loading state
             setInterval(() => refreshData(false), 4000);
+
+            // When tab/window becomes visible again: soft sync only (no loading screen)
+            document.addEventListener('visibilitychange', () => {
+                if (document.visibilityState === 'visible') {
+                    refreshData(false);
+                }
+            });
+            window.addEventListener('focus', () => {
+                refreshData(false);
+            });
 
             fetch('/api/health').then(r => r.json()).then(h => {
                 const el = document.getElementById('app-version');
                 if (el && h.version) el.textContent = `v${h.version}`;
                 if (Array.isArray(h.ides)) {
                     availableIdes = h.ides;
-                    if (selectedProjectPath || selectedSessionUid) renderData(true);
+                    if (selectedProjectPath || selectedSessionUid || allTerminals.length) renderData(true);
                 }
             }).catch(() => {});
         });
